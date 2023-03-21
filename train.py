@@ -127,7 +127,7 @@ def train_and_evaluate(workdir: str, train_config) -> None:
       axis_name='batch')
 
   train_metrics_last_t = time.time()
-  for step in range(state.step, train_config.train_steps):
+  for step in range(int(state.step), train_config.train_steps):
     batch_rng = jax.random.fold_in(rng, step)
     batch = train_ds.get_batch(batch_rng, train_config.batch_size)
     batch = common_utils.shard(jax.tree_util.tree_map(np.asarray, batch))
@@ -144,18 +144,22 @@ def train_and_evaluate(workdir: str, train_config) -> None:
           f'eval_{k}': v
           for k, v in jax.tree_util.tree_map(lambda x: x.mean(), eval_metrics).items()
       })
-      summary['steps_per_second'] = (train_config.log_train_metrics *
-                                     train_config.batch_size) / (time.time() - train_metrics_last_t)
+      summary['examples_per_second'] = (
+          train_config.log_train_metrics * train_config.batch_size) / (
+          time.time() - train_metrics_last_t)
 
       logging.info(f'Step {step}: {summary}')
       writer.write_scalars(step, summary)
       train_metrics_last_t = time.time()
 
       if jax.process_index() == 0:
-        checkpoints.save_checkpoint(workdir, flax_utils.unreplicate(state),
-                                    train_config.train_steps, overwrite=True)
+        checkpoints.save_checkpoint(workdir, flax_utils.unreplicate(
+          state), overwrite=True, step=step)
 
 
+logging.set_verbosity(logging.INFO)
 train_config = config.get_train_config()
-train_and_evaluate(f"/tmp/grokking_training/grok_{train_config.equation_type}_prime_{train_config.prime}_v0",
-                   train_config=train_config),
+logging.info(f"Train config {train_config}")
+train_and_evaluate(
+    f"/tmp/grokking_training/grok_{train_config.equation_type}_prime_{train_config.prime}_v1_tf_{train_config.train_fraction}",
+    train_config=train_config),
